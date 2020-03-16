@@ -1,0 +1,131 @@
+dow = readtable('DJIA30.csv');
+msft = readtable('MSFT.csv');
+aapl = readtable('AAPL.csv');
+
+%holds the market, and assets we are investigating
+data = {dow, msft, aapl};
+
+%hold weights for portfolio
+weights = [0 0 0];
+
+%will hold distributions of the assets and 
+dists = {};
+
+weights = updateWeights(weights);
+
+%finds distributions of individual assets
+for i = 1:size(data, 2)
+    data{i} = table2array(data{i}(:, 6));
+    
+    if isa(data{i}, 'double')
+        data{i} = num2cell(data{i});
+    end
+    
+    isEm = cellfun(@isempty, data{i}) ;
+    tmp = data{i};
+    
+    if isa(data{i}{1,1}, 'char')
+        data{i} = str2double(tmp(~isEm));
+        data{i} = tick2ret(data{i});
+    else
+        data{i} = tick2ret(cell2mat(data{i}));
+    end
+    
+    dist = fitdist(data{i}, 'Normal');
+    x = -.2:.00001:.2;
+    yKernel = pdf(dist, x);
+    dists{i} = yKernel;
+end
+
+%creates distribution of the portfolio
+portfolioDist = combineDist(dists, weights);
+
+%calculates the divergence
+i = 1;
+minDiv = [];
+minWeight = [];
+%while i < 100
+    %newDivergence = 0;
+    %jumps  = 0;
+    %divergence = getKL(yKernel, portfolioDist);
+    
+    %[minDiv(i), minWeight{i}] = hillClimb(dists, yKernel, weights, divergence, newDivergence, jumps); 
+%end
+
+%minDiviation, index = min(minDiv);
+%minDiviation;
+%minWieght{index}
+
+newDivergence = 0;
+jumps  = 0;
+divergence = getKL(yKernel, portfolioDist);
+[minDiviation, minWeights] = hillClimb(dists, yKernel, weights, divergence, newDivergence, jumps) 
+
+%hill climb to find optimal
+function [minDivergence, minWeights] = hillClimb(dists, yKernel, weights, divergence, newDivergence, jumps)
+    weights = updateWeights(weights);
+    minWeights = weights;
+    newDivergence = getKL(yKernel, combineDist(dists, weights));
+    
+    while (newDivergence < divergence)
+        minDivergence = newDivergence;
+        minWeights = weights;
+        divergence = newDivergence;
+        weights = climbWeights(weights);
+        newDivergence = getKL(yKernel, combineDist(dists, weights));   
+    end
+    
+    jumps = jumps + 1;
+    minDivergence = divergence;
+    
+    if(jumps == 10000)
+        return 
+    end
+    
+    hillClimb(dists, yKernel, weights, divergence, newDivergence, jumps);
+    minWeights = weights;
+    minDivergence = minDivergence;
+    return
+end
+
+%calculates KL divergence
+function divergence = getKL(dist1, dist2)
+    logDiff = log2(dist1) - log2(dist2);
+    mult = dist1 .* logDiff;
+    isNan = isnan(mult);
+    mult = mult(~isNan);
+    divergence = sum(mult);
+end
+
+%calculates the distributions of the combined portfolio
+function distribution = combineDist(dists, weights)
+    distribution = ones(size(dists{1}, 2), 1);
+    for i = 2:size(dists, 2)
+        distribution = distribution .* (dists{i} .* weights(i))';
+    end
+    dist = fitdist(distribution, 'Normal');
+    x = -.2:.00001:.2;
+    distribution = pdf(dist, x);
+end
+
+%jump to another possible weight setting
+function weights = updateWeights(weights)
+    for i = 2:numel(weights)
+            weights(i) = randi([0, 100],1, 1);
+    end
+    
+    if(sum(weights(1, 2:end)) >= 100  || sum(weights(1, 2:end)) < 95)
+        updateWeights(weights);
+    end
+    return
+end
+
+%trying to move 'up' a curve as opposed to jumping around
+function weights = climbWeights(weights)
+    for i = 2:numel(weights)
+        weights(i) = weights(i) + (randi([0, 100],1, 1))/100;
+    end
+    if(sum(weights(1, 2:end)) >= 100 || sum(weights(1, 2:end)) < 95)
+        climbWeights(weights);
+    end
+end
