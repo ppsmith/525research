@@ -9,8 +9,6 @@ Imagine a graph that plots weighting combinations against divergences. The goal 
 
 Good Link to learn the basics: https://www.geeksforgeeks.org/introduction-hill-climbing-artificial-intelligence/
 
-
-
 # What the Code Does
 
 This code starts with random weights and then calcualtes the divergence. If this divergence is the lowest found so far, it changes 
